@@ -109,24 +109,28 @@ def send_telegram_message(trade_data):
 def main():
     print("Controllo nuovi trade (GitHub Actions - Esecuzione singola)...")
     
-    # Calcoliamo il timestamp di 3 minuti fa in millisecondi (copre l'intervallo del cron)
-    three_minutes_ago = int((time.time() - 180) * 1000)
-    
     try:
-        # Interroghiamo Supabase filtrando per la strategia specifica e i timestamp recenti
+        # Selezioniamo solo i trade non ancora inviati a Telegram per questa strategia
         response = supabase.table("forward_trades") \
             .select("*") \
             .eq("strategy_id", TARGET_STRATEGY) \
-            .gt("tv_timestamp", three_minutes_ago) \
+            .eq("sent", False) \
             .order("tv_timestamp", desc=False) \
             .execute()
             
         if response.data:
             print(f"Trovati {len(response.data)} nuovi trade da elaborare.")
             for trade in response.data:
+                # Invia il messaggio
                 send_telegram_message(trade)
+                
+                # Aggiorna il record su Supabase per segnarlo come inviato
+                supabase.table("forward_trades") \
+                    .update({"sent": True}) \
+                    .eq("id", trade["id"]) \
+                    .execute()
         else:
-            print("Nessun nuovo trade recente.")
+            print("Nessun nuovo trade da inviare.")
             
     except Exception as e:
         print(f"Errore durante il controllo dei trade: {e}")
